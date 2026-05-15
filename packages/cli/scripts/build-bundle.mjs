@@ -69,7 +69,7 @@ done
 ROOT="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
 if [ "$NODE_MAJOR" -lt 24 ]; then
-  echo "pob-headless requires Node.js 24+. Run: source ~/.zshrc >/dev/null 2>&1; nvm use v24.13.0 >/dev/null" >&2
+  echo "pob-headless requires Node.js 24+. Install or activate Node.js 24+ and retry." >&2
   exit 1
 fi
 export POB_WEB_VERSION="\${POB_WEB_VERSION:-${version}}"
