@@ -8,6 +8,9 @@ const workspaceRoot = path.resolve(packageRoot, "..", "..");
 const repoRoot = path.resolve(workspaceRoot, "..", "..");
 const bundledPackagesRoot = path.join(packageRoot, "packages");
 const workspacePackagesRoot = path.join(workspaceRoot, "packages");
+const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+const runtimeLockTimeoutMs = 120_000;
+const staleRuntimeLockMs = 10 * 60_000;
 
 function resolvePackagesRoot() {
   if (fs.existsSync(bundledPackagesRoot)) {
@@ -83,9 +86,82 @@ export function readPobCodeFile(filePath) {
   return fs.readFileSync(filePath, "utf8").trim();
 }
 
+function sleepSync(ms) {
+  Atomics.wait(waitBuffer, 0, 0, ms);
+}
+
+function safePathSegment(value) {
+  return String(value).replace(/[^0-9A-Za-z._-]/g, "_");
+}
+
+function acquireRuntimeLock(runtimeBaseDir, version) {
+  fs.mkdirSync(runtimeBaseDir, { recursive: true });
+  const lockDir = path.join(runtimeBaseDir, `${safePathSegment(version)}.lock`);
+  const deadline = Date.now() + runtimeLockTimeoutMs;
+
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      const ownerPath = path.join(lockDir, "owner.json");
+      const token = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      fs.writeFileSync(
+        ownerPath,
+        `${JSON.stringify({ pid: process.pid, token, createdAt: new Date().toISOString() }, null, 2)}\n`,
+      );
+      return () => {
+        try {
+          const owner = JSON.parse(fs.readFileSync(ownerPath, "utf8"));
+          if (owner.token === token) {
+            fs.rmSync(lockDir, { recursive: true, force: true });
+          }
+        } catch {
+          // Another process may have already removed a stale lock.
+        }
+      };
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        throw error;
+      }
+
+      let lockAgeMs = 0;
+      try {
+        lockAgeMs = Date.now() - fs.statSync(lockDir).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (lockAgeMs > staleRuntimeLockMs) {
+        fs.rmSync(lockDir, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new PobHeadlessError("RUNTIME_LOCK_TIMEOUT", `Timed out waiting for runtime cache lock: ${lockDir}`, {
+          lockDir,
+          timeoutMs: runtimeLockTimeoutMs,
+        });
+      }
+      sleepSync(100);
+    }
+  }
+}
+
+function copyDirAtomically(src, dest) {
+  const tmpDest = `${dest}.tmp-${process.pid}-${Date.now()}`;
+  fs.rmSync(tmpDest, { recursive: true, force: true });
+  fs.cpSync(src, tmpDest, { recursive: true });
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.renameSync(tmpDest, dest);
+}
+
+function copyFileAtomically(src, dest) {
+  const tmpDest = `${dest}.tmp-${process.pid}-${Date.now()}`;
+  fs.copyFileSync(src, tmpDest);
+  fs.renameSync(tmpDest, dest);
+}
+
 function ensureRuntime({ version, build }) {
   const packagesRoot = resolvePackagesRoot();
-  const runtimeDir = path.join(packageRoot, "runtime", version);
+  const runtimeBaseDir = path.join(packageRoot, "runtime");
+  const runtimeDir = path.join(runtimeBaseDir, version);
   const rootZipFs = path.join(packagesRoot, "packer/build/poe1", version, "root-zipfs");
   const rootMount = path.join(runtimeDir, "root");
   const userMount = path.join(runtimeDir, "user");
@@ -93,6 +169,7 @@ function ensureRuntime({ version, build }) {
   const driverDist = path.join(packagesRoot, "driver/dist", build);
   const luaUtf8Source = path.join(driverDist, "lua-utf8.wasm");
   const luaUtf8Mount = path.join(libLuaDir, "lua-utf8.wasm");
+  const runtimeReadyMarker = path.join(runtimeDir, `.ready-${safePathSegment(build)}.json`);
 
   if (!fs.existsSync(rootZipFs)) {
     throw new PobHeadlessError("RUNTIME_NOT_FOUND", `Packed root-zipfs not found: ${rootZipFs}`, { rootZipFs });
@@ -101,21 +178,31 @@ function ensureRuntime({ version, build }) {
     throw new PobHeadlessError("RUNTIME_NOT_FOUND", `lua-utf8.wasm not found: ${luaUtf8Source}`, { luaUtf8Source });
   }
 
-  fs.mkdirSync(runtimeDir, { recursive: true });
-  fs.mkdirSync(userMount, { recursive: true });
-  fs.mkdirSync(libLuaDir, { recursive: true });
+  const releaseLock = acquireRuntimeLock(runtimeBaseDir, version);
+  try {
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(userMount, { recursive: true });
+    fs.mkdirSync(libLuaDir, { recursive: true });
 
-  if (fs.existsSync(rootMount) && fs.lstatSync(rootMount).isSymbolicLink()) {
-    fs.unlinkSync(rootMount);
-  }
-  if (!fs.existsSync(rootMount)) {
-    fs.cpSync(rootZipFs, rootMount, { recursive: true });
-  }
-  if (fs.existsSync(luaUtf8Mount) && fs.lstatSync(luaUtf8Mount).isSymbolicLink()) {
-    fs.unlinkSync(luaUtf8Mount);
-  }
-  if (!fs.existsSync(luaUtf8Mount)) {
-    fs.copyFileSync(luaUtf8Source, luaUtf8Mount);
+    if (fs.existsSync(rootMount) && fs.lstatSync(rootMount).isSymbolicLink()) {
+      fs.unlinkSync(rootMount);
+    }
+    if (!fs.existsSync(path.join(rootMount, ".image.tsv"))) {
+      copyDirAtomically(rootZipFs, rootMount);
+    }
+    if (fs.existsSync(luaUtf8Mount) && fs.lstatSync(luaUtf8Mount).isSymbolicLink()) {
+      fs.unlinkSync(luaUtf8Mount);
+    }
+    if (!fs.existsSync(luaUtf8Mount)) {
+      copyFileAtomically(luaUtf8Source, luaUtf8Mount);
+    }
+
+    fs.writeFileSync(
+      runtimeReadyMarker,
+      `${JSON.stringify({ version, build, preparedAt: new Date().toISOString() }, null, 2)}\n`,
+    );
+  } finally {
+    releaseLock();
   }
 
   return { runtimeDir, driverDist };
