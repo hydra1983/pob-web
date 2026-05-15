@@ -69,6 +69,15 @@ poc/dist/pob-headless-dev-aeccaca6/
 ```
 
 The bundle includes the CLI, driver wasm files, and packed PoB runtime. It still requires a modern Node.js runtime.
+The bundle also includes `package.json`, `LICENSE`, `NOTICE.md`, and executable `bin/` wrappers so it can be installed from the directory or archived as a release asset.
+
+Install a generated bundle into another repository with either:
+
+```bash
+npm install /absolute/path/to/poc/dist/pob-headless-dev-aeccaca6
+```
+
+or copy the bundle to a stable local tool path such as `tools/pob-headless/` and call `tools/pob-headless/bin/pob-headless`.
 
 ## Trade Candidate Verification
 
