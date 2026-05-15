@@ -88,7 +88,17 @@ fs.writeFileSync(
         "pob-headless": "bin/pob-headless",
         "verify-trade-candidate": "bin/verify-trade-candidate",
       },
-      files: ["bin", "poc", "packages", "LICENSE", "NOTICE.md", "README.md"],
+      files: [
+        "bin",
+        "poc/headless-api.mjs",
+        "poc/pob-headless-cli.mjs",
+        "poc/verify-trade-candidate.mjs",
+        "poc/items",
+        "packages",
+        "LICENSE",
+        "NOTICE.md",
+        "README.md",
+      ],
       pobHeadless: {
         runtimeVersion: version,
         driverBuild: build,
