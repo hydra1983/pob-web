@@ -4,6 +4,9 @@ project("driver")
 
 STRING (TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/boot.c
         COMMAND ${CMAKE_COMMAND} -E echo "Writing boot.lua to boot.c"
@@ -60,8 +63,8 @@ set(DRIVER_LINK_FLAGS
         "-sALLOW_MEMORY_GROWTH"
         "-sWASMFS"
         "-sSTRICT"
-        "-sINCOMING_MODULE_JS_API=[print,printErr]"
-        "-sEXPORTED_FUNCTIONS=[_malloc,_free,_init,_start,_on_frame,_on_key_down,_on_key_up,_on_char,_on_download_page_result,_on_subscript_finished,_load_build_from_code]"
+        "-sINCOMING_MODULE_JS_API=[print,printErr,wasmBinary]"
+        "-sEXPORTED_FUNCTIONS=[_malloc,_free,_init,_start,_on_frame,_on_key_down,_on_key_up,_on_char,_on_download_page_result,_on_subscript_finished,_load_build_from_code,_get_build_code,_eval_lua_string]"
         "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,ERRNO_CODES,setValue,HEAPU8,Asyncify"
         "-sASYNCIFY_IMPORTS=js_wasmfs_node_read"
         "-sMAIN_MODULE"

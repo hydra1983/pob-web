@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <emscripten.h>
 #include <emscripten/wasmfs.h>
 #include <assert.h>
@@ -310,7 +311,7 @@ static int DownloadPage(lua_State *L) {
 
 EMSCRIPTEN_KEEPALIVE
 int init() {
-    backend_t app = wasmfs_create_nodefs_backend("");
+    backend_t app = wasmfs_create_nodefs_backend(".");
     wasmfs_create_directory("/app", 0777, app);
 
     chdir("/app/root");
@@ -557,4 +558,64 @@ int load_build_from_code(const char *code) {
         return 1;
     }
     return 0;
+}
+
+static char *s_build_code = NULL;
+
+EMSCRIPTEN_KEEPALIVE
+const char *get_build_code() {
+    lua_State *L = GL;
+
+    free(s_build_code);
+    s_build_code = NULL;
+
+    lua_getglobal(L, "getBuildCode");
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+        fprintf(stderr, "Error: %s\n", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return NULL;
+    }
+
+    size_t len;
+    const char *code = lua_tolstring(L, -1, &len);
+    if (!code) {
+        lua_pop(L, 1);
+        return NULL;
+    }
+    s_build_code = malloc(len + 1);
+    memcpy(s_build_code, code, len);
+    s_build_code[len] = '\0';
+    lua_pop(L, 1);
+    return s_build_code;
+}
+
+static char *eval_lua_result;
+
+EMSCRIPTEN_KEEPALIVE
+const char *eval_lua_string(const char *code) {
+    lua_State *L = GL;
+    int top = lua_gettop(L);
+
+    if (luaL_loadstring(L, code) != LUA_OK || lua_pcall(L, 0, 1, 0) != LUA_OK) {
+        const char *error = lua_tostring(L, -1);
+        size_t len = strlen(error ? error : "unknown lua error");
+        free(eval_lua_result);
+        eval_lua_result = malloc(len + 1);
+        memcpy(eval_lua_result, error ? error : "unknown lua error", len + 1);
+        lua_settop(L, top);
+        return eval_lua_result;
+    }
+
+    size_t len;
+    const char *value = lua_tolstring(L, -1, &len);
+    if (!value) {
+        value = "";
+        len = 0;
+    }
+    free(eval_lua_result);
+    eval_lua_result = malloc(len + 1);
+    memcpy(eval_lua_result, value, len);
+    eval_lua_result[len] = '\0';
+    lua_settop(L, top);
+    return eval_lua_result;
 }

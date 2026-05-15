@@ -150,13 +150,21 @@ int _wasmfs_node_rmdir(const char* path) {
 EM_ASYNC_JS(int, js_wasmfs_node_open, (const char *path, const char *mode), {
     let fd;
     try {
-        fd = (await Module.fs.promises.open(UTF8ToString(path), UTF8ToString(mode)));
+        fd = await new Promise((resolve, reject) => {
+            Module.fs.open(UTF8ToString(path), UTF8ToString(mode), (err, fd) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(fd);
+                }
+            });
+        });
     } catch (e) {
         console.error("open error", e);
         if (!e.code) throw e;
         return Module.ERRNO_CODES[e.code];
     }
-    return fd.fd;
+    return fd;
 })
 
 int _wasmfs_node_open(const char* path, const char* mode) {

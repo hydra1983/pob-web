@@ -1,0 +1,21 @@
+Rarity: Rare
+Loath Barb
+Kinetic Wand
+--------
+Quality: +20%
+Physical Damage: 35-65
+Elemental Damage: 18-308
+Critical Strike Chance: 8.50%
+Attacks per Second: 1.60
+--------
+Requires Level 59, 188 Int
+--------
+Sockets: B-G-B
+--------
+Cannot roll Caster Modifiers
+--------
+11% increased Lightning Damage
+Adds 18 to 308 Lightning Damage
+Grants 30 Life per Enemy Hit
+46% increased Elemental Damage with Attack Skills
++28% to Global Critical Strike Multiplier
