@@ -39,7 +39,10 @@ node poc/pob-headless-cli.mjs list-slots --pretty
 node poc/pob-headless-cli.mjs stats --pob /absolute/path/to/pob.txt --pretty
 node poc/pob-headless-cli.mjs export-code --pob /absolute/path/to/pob.txt --pretty
 node poc/pob-headless-cli.mjs compare-item --pob /absolute/path/to/pob.txt --slot "Weapon 2" --item /absolute/path/to/item.txt --pretty
+node poc/pob-headless-cli.mjs batch-compare --pob /absolute/path/to/pob.txt --slot "Weapon 2" --items /absolute/path/to/candidates --pretty
 ```
+
+`batch-compare` accepts item text files, directories containing `.txt` files, or simple glob patterns. It loads the PoB once, compares every candidate, restores after each item, and returns sorted JSON with a summary and per-item decision.
 
 ## Tests
 
@@ -49,6 +52,7 @@ POB_WEB_VERSION=dev-aeccaca6 node poc/test-headless-api.mjs
 ```
 
 The test suite covers baseline stats, `getBuildCode()` round-trip, item compare/restore for both weapon slots, invalid slot errors, and invalid item text errors.
+It also smoke-tests the `batch-compare` CLI against the sample item directory.
 
 ## Bundle
 
@@ -80,4 +84,3 @@ The result includes a coarse decision:
 - `upgrade_candidate`
 - `manual_review`
 - `downgrade_skip`
-

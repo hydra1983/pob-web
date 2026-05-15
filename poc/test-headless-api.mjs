@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,6 +88,32 @@ record("invalid item text returns explicit lua error", async () => {
     () => api.setItem(handle, "Weapon 1", "not an item"),
     "LUA_ERROR",
   );
+});
+
+record("batch-compare CLI returns downgrade_skip", async () => {
+  const output = execFileSync(
+    process.execPath,
+    [
+      path.join(scriptDir, "pob-headless-cli.mjs"),
+      "batch-compare",
+      "--pob",
+      defaultPobCodeFile,
+      "--slot",
+      "Weapon 2",
+      "--items",
+      path.join(scriptDir, "items"),
+    ],
+    {
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
+  const payload = JSON.parse(output);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.summary.total, 1);
+  assert.equal(payload.summary.downgrade_skip, 1);
+  assert.equal(payload.results[0].decision, "downgrade_skip");
+  assert.equal(payload.results[0].restoredOk, true);
 });
 
 const results = [];
