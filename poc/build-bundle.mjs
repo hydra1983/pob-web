@@ -55,7 +55,17 @@ copyDir(
 function writeWrapper(name, target) {
   const wrapper = `#!/usr/bin/env bash
 set -euo pipefail
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="\${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT" ]; do
+  DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+  TARGET="$(readlink "$SCRIPT")"
+  if [[ "$TARGET" == /* ]]; then
+    SCRIPT="$TARGET"
+  else
+    SCRIPT="$DIR/$TARGET"
+  fi
+done
+ROOT="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
 if [ "$NODE_MAJOR" -lt 24 ]; then
   echo "${name} requires Node.js 24+. Run: source ~/.zshrc >/dev/null 2>&1; nvm use v24.13.0 >/dev/null" >&2
