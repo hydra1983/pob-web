@@ -3,8 +3,18 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const pobWebRoot = path.resolve(scriptDir, "..");
-const repoRoot = path.resolve(pobWebRoot, "..", "..");
+const packageRoot = path.resolve(scriptDir, "..");
+const workspaceRoot = path.resolve(packageRoot, "..", "..");
+const repoRoot = path.resolve(workspaceRoot, "..", "..");
+const bundledPackagesRoot = path.join(packageRoot, "packages");
+const workspacePackagesRoot = path.join(workspaceRoot, "packages");
+
+function resolvePackagesRoot() {
+  if (fs.existsSync(bundledPackagesRoot)) {
+    return bundledPackagesRoot;
+  }
+  return workspacePackagesRoot;
+}
 
 export const defaultPobCodeFile = path.join(
   repoRoot,
@@ -74,12 +84,13 @@ export function readPobCodeFile(filePath) {
 }
 
 function ensureRuntime({ version, build }) {
-  const runtimeDir = path.join(pobWebRoot, "poc", "runtime", version);
-  const rootZipFs = path.join(pobWebRoot, "packages/packer/build/poe1", version, "root-zipfs");
+  const packagesRoot = resolvePackagesRoot();
+  const runtimeDir = path.join(packageRoot, "runtime", version);
+  const rootZipFs = path.join(packagesRoot, "packer/build/poe1", version, "root-zipfs");
   const rootMount = path.join(runtimeDir, "root");
   const userMount = path.join(runtimeDir, "user");
   const libLuaDir = path.join(runtimeDir, "lib", "lua");
-  const driverDist = path.join(pobWebRoot, "packages/driver/dist", build);
+  const driverDist = path.join(packagesRoot, "driver/dist", build);
   const luaUtf8Source = path.join(driverDist, "lua-utf8.wasm");
   const luaUtf8Mount = path.join(libLuaDir, "lua-utf8.wasm");
 

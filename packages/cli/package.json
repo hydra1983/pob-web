@@ -1,0 +1,16 @@
+{
+  "name": "@hydra1983/pob-headless-cli",
+  "private": true,
+  "version": "0.0.0-dev-aeccaca6",
+  "type": "module",
+  "bin": {
+    "pob-headless": "bin/pob-headless"
+  },
+  "scripts": {
+    "build:bundle": "node scripts/build-bundle.mjs",
+    "test": "node scripts/test-headless-api.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

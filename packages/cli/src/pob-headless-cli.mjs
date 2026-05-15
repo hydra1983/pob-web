@@ -10,6 +10,7 @@ import {
   readPobCodeFile,
   supportedSlots,
 } from "./headless-api.mjs";
+import { classifyCandidateDelta } from "./verify-candidate.mjs";
 
 function usage() {
   return `Usage:
@@ -18,6 +19,7 @@ function usage() {
   pob-headless set-item --pob <pob.txt> --slot <slot> --item <item.txt> [--include-code]
   pob-headless compare-item --pob <pob.txt> --slot <slot> --item <item.txt> [--include-code]
   pob-headless batch-compare --pob <pob.txt> --slot <slot> --items <file|dir|glob> [more files...] [--full] [--include-code]
+  pob-headless verify-candidate --pob <pob.txt> --slot <slot> --item <item.txt> [--include-code]
   pob-headless list-slots
 
 Environment:
@@ -168,21 +170,6 @@ function omitCodeFromCompare(result) {
   };
 }
 
-function classifyDelta(delta) {
-  const dps = delta.combinedDps ?? delta.totalDps ?? 0;
-  const ehp = delta.effectiveHitPool ?? 0;
-  const life = delta.life ?? 0;
-  const chaosResist = delta.chaosResist ?? 0;
-
-  if (dps > 0 && ehp >= -500 && life >= -50 && chaosResist >= -5) {
-    return "upgrade_candidate";
-  }
-  if (dps < 0 && (ehp < 0 || life < 0 || chaosResist < 0)) {
-    return "downgrade_skip";
-  }
-  return "manual_review";
-}
-
 const decisionRank = {
   upgrade_candidate: 0,
   manual_review: 1,
@@ -195,7 +182,7 @@ function compactCompareResult(result, includeCode) {
   return {
     slot: payload.slot,
     equipped: payload.equipped,
-    decision: classifyDelta(payload.delta),
+    decision: classifyCandidateDelta(payload.delta),
     restoredOk: payload.restoredOk,
     delta: payload.delta,
     after: {
@@ -320,7 +307,7 @@ async function main() {
     return;
   }
 
-  if (command === "set-item" || command === "compare-item") {
+  if (command === "set-item" || command === "compare-item" || command === "verify-candidate") {
     const slot = assertSupportedSlot(args.slot);
     const item = readRequiredFile(args.item, "item");
     const result = await withBuild(pob.text, async (api, handle) => {
@@ -338,6 +325,15 @@ async function main() {
         };
       }
       const compare = await api.compareItem(handle, slot, item.text);
+      if (command === "verify-candidate") {
+        return {
+          ...common,
+          itemFile: item.path,
+          slot,
+          decision: classifyCandidateDelta(compare.delta),
+          result: args["include-code"] ? compare : omitCodeFromCompare(compare),
+        };
+      }
       return {
         ...common,
         itemFile: item.path,

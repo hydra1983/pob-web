@@ -8,10 +8,11 @@ import {
   createPobHeadlessApi,
   defaultPobCodeFile,
   readPobCodeFile,
-} from "./headless-api.mjs";
+} from "../src/headless-api.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const itemFile = path.join(scriptDir, "items", "loath-barb-kinetic-wand.txt");
+const packageRoot = path.resolve(scriptDir, "..");
+const itemFile = path.join(packageRoot, "fixtures", "items", "loath-barb-kinetic-wand.txt");
 const pobCode = readPobCodeFile(defaultPobCodeFile);
 const wandText = fs.readFileSync(itemFile, "utf8").trim();
 const api = await createPobHeadlessApi({ verbose: process.env.POB_HEADLESS_VERBOSE === "1" });
@@ -94,14 +95,14 @@ record("batch-compare CLI returns downgrade_skip", async () => {
   const output = execFileSync(
     process.execPath,
     [
-      path.join(scriptDir, "pob-headless-cli.mjs"),
+      path.join(packageRoot, "src", "pob-headless-cli.mjs"),
       "batch-compare",
       "--pob",
       defaultPobCodeFile,
       "--slot",
       "Weapon 2",
       "--items",
-      path.join(scriptDir, "items"),
+      path.join(packageRoot, "fixtures", "items"),
     ],
     {
       encoding: "utf8",
@@ -114,6 +115,30 @@ record("batch-compare CLI returns downgrade_skip", async () => {
   assert.equal(payload.summary.downgrade_skip, 1);
   assert.equal(payload.results[0].decision, "downgrade_skip");
   assert.equal(payload.results[0].restoredOk, true);
+});
+
+record("verify-candidate CLI returns downgrade_skip", async () => {
+  const output = execFileSync(
+    process.execPath,
+    [
+      path.join(packageRoot, "src", "pob-headless-cli.mjs"),
+      "verify-candidate",
+      "--pob",
+      defaultPobCodeFile,
+      "--slot",
+      "Weapon 2",
+      "--item",
+      itemFile,
+    ],
+    {
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
+  const payload = JSON.parse(output);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.decision, "downgrade_skip");
+  assert.equal(payload.result.restoredOk, true);
 });
 
 const results = [];

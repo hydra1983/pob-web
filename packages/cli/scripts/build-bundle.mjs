@@ -3,15 +3,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const pobWebRoot = path.resolve(scriptDir, "..");
+const packageRoot = path.resolve(scriptDir, "..");
+const workspaceRoot = path.resolve(packageRoot, "..", "..");
+const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"));
+
 const version = process.env.POB_WEB_VERSION || process.argv[2] || "dev-aeccaca6";
 const build = process.env.POB_WEB_BUILD || "release";
-const packageVersion = `0.0.0-${version.replace(/[^0-9A-Za-z-]/g, "-")}`;
-const packageName = process.env.POB_HEADLESS_PACKAGE_NAME || "@hydra1983/pob-headless";
-const outDir = path.join(scriptDir, "dist", `pob-headless-${version}`);
+const packageVersion = process.env.POB_HEADLESS_PACKAGE_VERSION || packageJson.version;
+const packageName = process.env.POB_HEADLESS_PACKAGE_NAME || packageJson.name;
+const outDir = path.join(packageRoot, "dist", `pob-headless-${version}`);
 
-const driverDist = path.join(pobWebRoot, "packages", "driver", "dist", build);
-const runtimeRoot = path.join(pobWebRoot, "packages", "packer", "build", "poe1", version, "root-zipfs");
+const driverDist = path.join(workspaceRoot, "packages", "driver", "dist", build);
+const runtimeRoot = path.join(workspaceRoot, "packages", "packer", "build", "poe1", version, "root-zipfs");
 
 function assertExists(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -37,12 +40,10 @@ assertExists(runtimeRoot);
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
-copyFile(path.join(scriptDir, "headless-api.mjs"), path.join(outDir, "poc", "headless-api.mjs"));
-copyFile(path.join(scriptDir, "pob-headless-cli.mjs"), path.join(outDir, "poc", "pob-headless-cli.mjs"));
-copyFile(path.join(scriptDir, "verify-trade-candidate.mjs"), path.join(outDir, "poc", "verify-trade-candidate.mjs"));
-copyDir(path.join(scriptDir, "items"), path.join(outDir, "poc", "items"));
-copyFile(path.join(pobWebRoot, "LICENSE"), path.join(outDir, "LICENSE"));
-copyFile(path.join(pobWebRoot, "NOTICE.md"), path.join(outDir, "NOTICE.md"));
+copyDir(path.join(packageRoot, "src"), path.join(outDir, "src"));
+copyDir(path.join(packageRoot, "fixtures"), path.join(outDir, "fixtures"));
+copyFile(path.join(workspaceRoot, "LICENSE"), path.join(outDir, "LICENSE"));
+copyFile(path.join(workspaceRoot, "NOTICE.md"), path.join(outDir, "NOTICE.md"));
 
 for (const file of ["driver.mjs", "driver.wasm", "lua-utf8.wasm"]) {
   copyFile(path.join(driverDist, file), path.join(outDir, "packages", "driver", "dist", build, file));
@@ -52,7 +53,7 @@ copyDir(
   path.join(outDir, "packages", "packer", "build", "poe1", version, "root-zipfs"),
 );
 
-function writeWrapper(name, target) {
+function writeWrapper() {
   const wrapper = `#!/usr/bin/env bash
 set -euo pipefail
 SCRIPT="\${BASH_SOURCE[0]}"
@@ -68,21 +69,20 @@ done
 ROOT="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
 if [ "$NODE_MAJOR" -lt 24 ]; then
-  echo "${name} requires Node.js 24+. Run: source ~/.zshrc >/dev/null 2>&1; nvm use v24.13.0 >/dev/null" >&2
+  echo "pob-headless requires Node.js 24+. Run: source ~/.zshrc >/dev/null 2>&1; nvm use v24.13.0 >/dev/null" >&2
   exit 1
 fi
 export POB_WEB_VERSION="\${POB_WEB_VERSION:-${version}}"
 export POB_WEB_BUILD="\${POB_WEB_BUILD:-${build}}"
-exec node "$ROOT/${target}" "$@"
+exec node "$ROOT/src/pob-headless-cli.mjs" "$@"
 `;
-  const wrapperPath = path.join(outDir, "bin", name);
+  const wrapperPath = path.join(outDir, "bin", "pob-headless");
   fs.mkdirSync(path.dirname(wrapperPath), { recursive: true });
   fs.writeFileSync(wrapperPath, wrapper);
   fs.chmodSync(wrapperPath, 0o755);
 }
 
-writeWrapper("pob-headless", "poc/pob-headless-cli.mjs");
-writeWrapper("verify-trade-candidate", "poc/verify-trade-candidate.mjs");
+writeWrapper();
 
 fs.writeFileSync(
   path.join(outDir, "package.json"),
@@ -96,14 +96,13 @@ fs.writeFileSync(
       type: "module",
       bin: {
         "pob-headless": "bin/pob-headless",
-        "verify-trade-candidate": "bin/verify-trade-candidate",
       },
       files: [
         "bin",
-        "poc/headless-api.mjs",
-        "poc/pob-headless-cli.mjs",
-        "poc/verify-trade-candidate.mjs",
-        "poc/items",
+        "src/headless-api.mjs",
+        "src/pob-headless-cli.mjs",
+        "src/verify-candidate.mjs",
+        "fixtures",
         "packages",
         "LICENSE",
         "NOTICE.md",
@@ -126,7 +125,7 @@ fs.writeFileSync(
   path.join(outDir, "README.md"),
   `# pob-headless bundle
 
-Self-contained PoB headless CLI bundle generated from temp/pob-web.
+Self-contained PoB headless CLI bundle generated from pob-web.
 
 - Package name: ${packageName}
 - Package version: ${packageVersion}
@@ -138,12 +137,12 @@ Examples:
 
 \`\`\`bash
 bin/pob-headless stats --pob /absolute/path/to/pob.txt --pretty
-bin/pob-headless compare-item --pob /absolute/path/to/pob.txt --slot "Weapon 2" --item poc/items/loath-barb-kinetic-wand.txt --pretty
+bin/pob-headless compare-item --pob /absolute/path/to/pob.txt --slot "Weapon 2" --item fixtures/items/loath-barb-kinetic-wand.txt --pretty
 bin/pob-headless batch-compare --pob /absolute/path/to/pob.txt --slot "Weapon 2" --items /absolute/path/to/candidates --pretty
-bin/verify-trade-candidate --pob /absolute/path/to/pob.txt --slot "Weapon 2" --item poc/items/loath-barb-kinetic-wand.txt
+bin/pob-headless verify-candidate --pob /absolute/path/to/pob.txt --slot "Weapon 2" --item fixtures/items/loath-barb-kinetic-wand.txt --pretty
 \`\`\`
 
-Install from this directory with \`npm install <bundle-dir>\`, or copy the bundle directory to a stable local tool path.
+Install from this directory with \`npm install <bundle-dir>\`, or install the packed tarball generated by \`npm pack\`.
 `,
 );
 

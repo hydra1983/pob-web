@@ -9,7 +9,7 @@ build/
 r2/
 .emscripten_cache*/
 .npm-cache/
-poc/runtime/
-poc/dist/
+packages/cli/runtime/
+packages/cli/dist/
 .wrangler
 .react-router/
